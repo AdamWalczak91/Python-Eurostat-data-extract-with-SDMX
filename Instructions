@@ -1,0 +1,49 @@
+'''
+The code will extract data from eurostat directly to file. You can get codes from the data explorer checking filters.
+http://appsso.eurostat.ec.europa.eu/nui/show.do?dataset=DS-645593&lang=en
+For this example I am going to extract data about trade between France and 2 groups of countries(inside EU28, Outside EU28). I am going to look at wine specifically.
+'''
+#Necessary libraries
+import pandasdmx as sdmx
+import pandas as pd
+
+#First line specifies what kind of database aare we going to connect with, as SDMX provides access to several more.
+#To get the right code for the datastructure you have to go to https://ec.europa.eu/eurostat/web/sdmx-web-services/rest-sdmx-2.1 and get the file from "DATA FOR RETRIEVING DATA". After you open the file, find your report and get it's <Ref id="">
+#I knew my report is named DS-645593 which allowed me to find DSD_DS-645593
+estat = sdmx.Request('ESTAT')
+metadata = estat.datastructure('DSD_DS-645593').write()
+
+#Here I set up all the filters I would normally pick in report
+reporters = ['FR']
+partners = ['EU28_EXTRA','EU28_INTRA']
+flow = ['1','2']
+codes = ['220410']
+
+#Initializing process
+header_active = True
+status = 0
+print("Downloading data:")
+
+#Downloading has been on purpose split into two(more migh be necessary with bigger data sets) loops. Eurostat is blocking too big queries, so the process had to be split.
+
+for y in codes:
+    for z in partners:
+        iteration = 1
+        #For each filter I provide specific values and starting period, for frequency i've picked months(M)
+        resp = estat.data('DS-645593', key={'REPORTER': reporters ,'PARTNER': z,'PRODUCT': y, 'FLOW': flow, 'FREQ': 'M'}, params={'startPeriod': '2019'})
+        
+        #Here we have to choose what kind of indicator has to be picked for values
+        data = resp.write(s for s in resp.data.series if s.key.INDICATORS == 'QUANTITY_IN_100KG')
+        
+        #Originally data downloads as stacked, to make it more readible we unstack it and drop all NA
+        data = data.unstack().dropna()
+        
+        #I leave header as variable in case I would like to add data with the query instead of creating new file
+        data.to_csv(r'France_Wine_Trade.csv',  header=header_active, mode='a')
+        header_active = False
+        
+        #Last 2 lines will notice about the progress, as extract can take easily more than an hour.
+        status = status + (1 /(len(codes_beer) * len(partners)))
+        print(str(round(status,2)*100)+"%")
+        
+print("Extract done.")
